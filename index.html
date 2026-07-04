@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solitaire</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0e0e0f;
+      --surface: #1a1a1c;
+      --surface2: #232325;
+      --border: rgba(255,255,255,0.08);
+      --border-strong: rgba(255,255,255,0.18);
+      --text: #f0ede8;
+      --text-muted: rgba(240,237,232,0.45);
+      --accent: #c8a97e;
+      --accent2: #7eb8c8;
+      --green: #7ec89a;
+      --red-suit: #c87e7e;
+      --felt: #1a3a2a;
+      --felt-border: #2a5a3a;
+      --card-bg: #f5f0e8;
+      --card-border: #d4c8b0;
+      --radius: 10px;
+      --radius-lg: 16px;
+      --card-r: 8px;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 1.5rem 0.5rem;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+    }
+    .wrapper { position: relative; width: 100%; max-width: 780px; }
+
+    .header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.25rem; }
+    .game-title { font-family: 'Fraunces', serif; font-weight: 300; font-size: 2rem; letter-spacing: -0.02em; line-height: 1; }
+    .game-title em { font-style: italic; color: var(--accent); }
+    .version-tag { font-size: 10px; color: var(--text-muted); letter-spacing: 0.12em; text-transform: uppercase; }
+
+    .stat-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 1rem; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; text-align: center; }
+    .stat-label { font-size: 9px; letter-spacing: 0.14em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 3px; }
+    .stat-val { font-family: 'Fraunces', serif; font-size: 1.3rem; font-weight: 600; line-height: 1; color: var(--accent); }
+    .stat-val.blue { color: var(--accent2); }
+    .stat-val.green { color: var(--green); }
+
+    .controls { display: flex; gap: 6px; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+    .pill-btn { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.08em; padding: 5px 13px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.18s; }
+    .pill-btn:hover { color: var(--text); border-color: var(--text); }
+    .pill-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .action-btn { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.06em; padding: 5px 13px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-muted); cursor: pointer; transition: all 0.18s; }
+    .action-btn:hover { color: var(--text); border-color: var(--text); }
+
+    /* felt table */
+    .felt { background: var(--felt); border: 2px solid var(--felt-border); border-radius: var(--radius-lg); padding: 14px 12px 20px; position: relative; overflow: hidden; }
+    .felt::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.012) 4px, rgba(255,255,255,0.012) 8px); pointer-events: none; }
+
+    /* top row */
+    .top-row { display: flex; gap: 10px; margin-bottom: 14px; align-items: flex-start; }
+    .stock-waste { display: flex; gap: 10px; }
+    .foundations { display: flex; gap: 10px; margin-left: auto; }
+
+    /* card slot (empty placeholder) */
+    .slot { width: 80px; height: 112px; border: 2px dashed rgba(255,255,255,0.15); border-radius: var(--card-r); display: flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: pointer; transition: border-color 0.15s; position: relative; }
+    .slot:hover { border-color: rgba(255,255,255,0.3); }
+    .slot-label { font-size: 22px; opacity: 0.25; }
+
+    /* tableau */
+    .tableau { display: flex; gap: 10px; }
+    .tableau-col { width: 80px; flex-shrink: 0; position: relative; min-height: 112px; }
+
+    /* cards */
+    .card {
+      width: 80px; height: 112px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--card-r);
+      position: absolute;
+      cursor: pointer;
+      user-select: none;
+      transition: box-shadow 0.12s, transform 0.12s;
+      display: flex; flex-direction: column;
+    }
+    .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+    .card.dragging { opacity: 0.85; box-shadow: 0 8px 28px rgba(0,0,0,0.6); transform: scale(1.04); z-index: 1000; position: fixed; pointer-events: none; }
+    .card.face-down {
+      background: linear-gradient(135deg, #1e3a5a 25%, #162d47 25%, #162d47 50%, #1e3a5a 50%, #1e3a5a 75%, #162d47 75%);
+      background-size: 12px 12px;
+      cursor: default;
+    }
+    .card.face-down::after { content: ''; position: absolute; inset: 3px; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; }
+    .card-corner { padding: 4px 6px; line-height: 1; }
+    .card-corner.bottom { position: absolute; bottom: 0; right: 0; transform: rotate(180deg); }
+    .card-rank { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; line-height: 1; }
+    .card-suit { font-size: 13px; line-height: 1; }
+    .card-center { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 32px; }
+    .red { color: #c0392b; }
+    .black { color: #1a1a2e; }
+
+    .card.selected { box-shadow: 0 0 0 2px #c8a97e, 0 4px 16px rgba(0,0,0,0.4); }
+    .card.valid-target { box-shadow: 0 0 0 2px #7ec89a; }
+
+    /* waste pile — show up to 3 fanned */
+    .waste-fan { position: relative; width: 80px; height: 112px; }
+    .waste-fan .card { position: absolute; top: 0; }
+
+    /* foundation done animation */
+    @keyframes cardWin { 0%{transform:scale(1)} 50%{transform:scale(1.08)} 100%{transform:scale(1)} }
+    .card.win-bounce { animation: cardWin 0.3s ease; }
+
+    /* overlay */
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(14,14,15,0.88); z-index: 500; align-items: center; justify-content: center; }
+    .overlay.show { display: flex; }
+    .modal { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); padding: 2.5rem 2rem; text-align: center; max-width: 320px; width: 90%; }
+    .modal-title { font-family: 'Fraunces', serif; font-size: 1.8rem; font-weight: 300; margin-bottom: 0.5rem; }
+    .modal-title em { font-style: italic; color: var(--green); }
+    .modal-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 1.5rem; letter-spacing: 0.06em; line-height: 1.8; }
+    .modal-btn { font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 0.08em; padding: 10px 28px; border-radius: 999px; border: 1px solid var(--text); background: var(--text); color: var(--bg); cursor: pointer; }
+    .modal-btn:hover { opacity: 0.85; }
+
+    .footer { margin-top: 1.5rem; font-size: 10px; color: var(--text-muted); letter-spacing: 0.1em; text-align: center; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <h1 class="game-title"><em>Soli</em>taire</h1>
+    <span class="version-tag">v1.0</span>
+  </div>
+
+  <div class="stat-strip">
+    <div class="stat-card"><div class="stat-label">Moves</div><div class="stat-val" id="movesVal">0</div></div>
+    <div class="stat-card"><div class="stat-label">Time</div><div class="stat-val blue" id="timerVal">00:00</div></div>
+    <div class="stat-card"><div class="stat-label">Best</div><div class="stat-val green" id="bestVal">--:--</div></div>
+    <div class="stat-card"><div class="stat-label">Score</div><div class="stat-val" id="scoreVal">0</div></div>
+  </div>
+
+  <div class="controls">
+    <button class="pill-btn active" id="d1" onclick="setDraw(1)">Draw 1</button>
+    <button class="pill-btn" id="d3" onclick="setDraw(3)">Draw 3</button>
+    <button class="action-btn" onclick="newGame()">↺ New game</button>
+    <button class="action-btn" onclick="undoMove()" id="undoBtn">↩ Undo</button>
+    <button class="action-btn" onclick="autoComplete()" id="autoBtn" style="display:none">✓ Auto-complete</button>
+  </div>
+
+  <div class="felt">
+    <div class="top-row">
+      <div class="stock-waste">
+        <div class="slot" id="stockSlot" onclick="drawFromStock()"><span class="slot-label">🂠</span></div>
+        <div class="waste-fan" id="wasteSlot"></div>
+      </div>
+      <div class="foundations">
+        <div class="slot" id="f0" data-found="0"><span class="slot-label">♠</span></div>
+        <div class="slot" id="f1" data-found="1"><span class="slot-label">♥</span></div>
+        <div class="slot" id="f2" data-found="2"><span class="slot-label">♦</span></div>
+        <div class="slot" id="f3" data-found="3"><span class="slot-label">♣</span></div>
+      </div>
+    </div>
+    <div class="tableau" id="tableau"></div>
+  </div>
+
+  <div class="footer">Built with HTML · CSS · JavaScript &nbsp;·&nbsp; Click a card to select, click destination to move</div>
+</div>
+
+<!-- win overlay -->
+<div class="overlay" id="winOverlay">
+  <div class="modal">
+    <div class="modal-title">You <em>win!</em></div>
+    <div class="modal-sub" id="winSub"></div>
+    <button class="modal-btn" onclick="newGame(); document.getElementById('winOverlay').classList.remove('show')">Play again</button>
+  </div>
+</div>
+
+<script>
+// ---- Constants ----
+const SUITS = ['♠','♥','♦','♣'];
+const SUIT_COLORS = ['black','red','red','black'];
+const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const RANK_VAL = {A:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,J:11,Q:12,K:13};
+
+// ---- State ----
+let stock, waste, foundations, tableau;
+let drawMode = 1;
+let moves, seconds, timerInt, score;
+let history = [];
+let selected = null; // {source, cards, fromIdx}
+let gameStarted = false;
+
+const best = () => localStorage.getItem('sol-best-d'+drawMode);
+const saveBest = (s) => localStorage.setItem('sol-best-d'+drawMode, s);
+
+function fmt(s) { return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+
+function setDraw(n) {
+  drawMode = n;
+  document.getElementById('d1').classList.toggle('active', n===1);
+  document.getElementById('d3').classList.toggle('active', n===3);
+  updateBest();
+  newGame();
+}
+
+function updateBest() {
+  const b = best();
+  document.getElementById('bestVal').textContent = b ? fmt(parseInt(b)) : '--:--';
+}
+
+// ---- Deck ----
+function makeDeck() {
+  const deck = [];
+  for (let s=0; s<4; s++)
+    for (let r=0; r<13; r++)
+      deck.push({ suit: s, rank: r, faceUp: false });
+  return deck;
+}
+
+function shuffle(arr) {
+  for (let i=arr.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+}
+
+// ---- New Game ----
+function newGame() {
+  clearInterval(timerInt);
+  const deck = makeDeck(); shuffle(deck);
+  stock = []; waste = [];
+  foundations = [[],[],[],[]];
+  tableau = Array.from({length:7}, () => []);
+  history = []; selected = null; moves = 0; seconds = 0; score = 0;
+  gameStarted = false;
+
+  let idx = 0;
+  for (let col=0; col<7; col++) {
+    for (let row=0; row<=col; row++) {
+      const card = deck[idx++];
+      card.faceUp = (row === col);
+      tableau[col].push(card);
+    }
+  }
+  while (idx < 52) stock.push(deck[idx++]);
+
+  document.getElementById('movesVal').textContent = 0;
+  document.getElementById('timerVal').textContent = '00:00';
+  document.getElementById('scoreVal').textContent = 0;
+  document.getElementById('winOverlay').classList.remove('show');
+  document.getElementById('autoBtn').style.display = 'none';
+  updateBest();
+  render();
+}
+
+function startTimer() {
+  if (gameStarted) return;
+  gameStarted = true;
+  timerInt = setInterval(() => {
+    seconds++;
+    document.getElementById('timerVal').textContent = fmt(seconds);
+  }, 1000);
+}
+
+// ---- Save/restore state for undo ----
+function saveState() {
+  history.push({
+    stock: stock.map(c=>({...c})),
+    waste: waste.map(c=>({...c})),
+    foundations: foundations.map(f=>f.map(c=>({...c}))),
+    tableau: tableau.map(t=>t.map(c=>({...c}))),
+    moves, score
+  });
+  if (history.length > 40) history.shift();
+}
+
+function undoMove() {
+  if (!history.length) return;
+  const s = history.pop();
+  stock = s.stock; waste = s.waste;
+  foundations = s.foundations; tableau = s.tableau;
+  moves = s.moves; score = s.score;
+  selected = null;
+  document.getElementById('movesVal').textContent = moves;
+  document.getElementById('scoreVal').textContent = score;
+  render();
+}
+
+// ---- Move validation ----
+function canPlaceOnTableau(card, col) {
+  const pile = tableau[col];
+  if (!pile.length) return card.rank === 12; // K on empty
+  const top = pile[pile.length-1];
+  if (!top.faceUp) return false;
+  return SUIT_COLORS[card.suit] !== SUIT_COLORS[top.suit] && card.rank === top.rank - 1;
+}
+
+function canPlaceOnFoundation(card, fIdx) {
+  const pile = foundations[fIdx];
+  if (!pile.length) return card.rank === 0; // A
+  const top = pile[pile.length-1];
+  return card.suit === top.suit && card.rank === top.rank + 1;
+}
+
+function autoPlaceToFoundation(card) {
+  for (let f=0; f<4; f++) {
+    if (canPlaceOnFoundation(card, f)) return f;
+  }
+  return -1;
+}
+
+// ---- Draw from stock ----
+function drawFromStock() {
+  startTimer();
+  saveState();
+  if (!stock.length) {
+    // reset stock from waste
+    stock = waste.slice().reverse().map(c=>({...c, faceUp:false}));
+    waste = [];
+    score = Math.max(0, score - 100);
+  } else {
+    const n = Math.min(drawMode, stock.length);
+    for (let i=0; i<n; i++) {
+      const c = stock.pop();
+      c.faceUp = true;
+      waste.push(c);
+    }
+    score += 5;
+  }
+  selected = null;
+  document.getElementById('scoreVal').textContent = score;
+  render();
+}
+
+// ---- Click handling ----
+function handleCardClick(source, cardIdx, colIdx) {
+  startTimer();
+
+  // if something selected, try to move
+  if (selected) {
+    if (tryMove(source, cardIdx, colIdx)) return;
+    // deselect if clicking same card
+    if (selected.source === source && selected.colIdx === colIdx && selected.cardIdx === cardIdx) {
+      selected = null; render(); return;
+    }
+  }
+
+  // select card
+  let card, cards;
+  if (source === 'waste') {
+    if (!waste.length) return;
+    card = waste[waste.length-1];
+    cards = [card];
+    selected = { source:'waste', cards, cardIdx: waste.length-1, colIdx: null };
+  } else if (source === 'tableau') {
+    const pile = tableau[colIdx];
+    if (cardIdx >= pile.length || !pile[cardIdx].faceUp) return;
+    cards = pile.slice(cardIdx);
+    selected = { source:'tableau', cards, cardIdx, colIdx };
+  } else if (source === 'foundation') {
+    if (!foundations[colIdx].length) return;
+    card = foundations[colIdx][foundations[colIdx].length-1];
+    cards = [card];
+    selected = { source:'foundation', cards, cardIdx: foundations[colIdx].length-1, colIdx };
+  }
+  render();
+}
+
+function handleDestClick(dest, destCol) {
+  if (!selected) return;
+  tryMove(dest, null, destCol);
+}
+
+function tryMove(dest, cardIdx, destCol) {
+  if (!selected) return false;
+  const { source, cards, colIdx: srcCol } = selected;
+  const card = cards[0];
+
+  let valid = false;
+  saveState();
+
+  if (dest === 'foundation') {
+    if (cards.length === 1 && canPlaceOnFoundation(card, destCol)) {
+      // remove from source
+      removeFromSource();
+      foundations[destCol].push(card);
+      score += 15;
+      valid = true;
+      moves++;
+      checkAutoComplete();
+      checkWin();
+    }
+  } else if (dest === 'tableau') {
+    if (canPlaceOnTableau(card, destCol)) {
+      removeFromSource();
+      tableau[destCol].push(...cards);
+      score += 5;
+      valid = true;
+      moves++;
+    }
+  }
+
+  if (!valid) { history.pop(); }
+  else {
+    flipTopTableau();
+    selected = null;
+    document.getElementById('movesVal').textContent = moves;
+    document.getElementById('scoreVal').textContent = score;
+    render();
+  }
+  return valid;
+}
+
+function removeFromSource() {
+  const { source, cardIdx, colIdx } = selected;
+  if (source === 'waste') waste.pop();
+  else if (source === 'tableau') tableau[colIdx].splice(cardIdx);
+  else if (source === 'foundation') foundations[colIdx].pop();
+}
+
+function flipTopTableau() {
+  tableau.forEach(pile => {
+    if (pile.length && !pile[pile.length-1].faceUp) {
+      pile[pile.length-1].faceUp = true;
+      score += 10;
+    }
+  });
+}
+
+// ---- Double click: auto-send to foundation ----
+function handleDblClick(source, cardIdx, colIdx) {
+  startTimer();
+  let card;
+  if (source === 'waste') card = waste[waste.length-1];
+  else if (source === 'tableau') {
+    const pile = tableau[colIdx];
+    if (cardIdx !== pile.length-1) return;
+    card = pile[cardIdx];
+  } else return;
+
+  const f = autoPlaceToFoundation(card);
+  if (f === -1) return;
+  saveState();
+  if (source === 'waste') waste.pop();
+  else tableau[colIdx].pop();
+  foundations[f].push(card);
+  score += 15; moves++;
+  flipTopTableau();
+  selected = null;
+  document.getElementById('movesVal').textContent = moves;
+  document.getElementById('scoreVal').textContent = score;
+  checkAutoComplete();
+  checkWin();
+  render();
+}
+
+// ---- Auto-complete ----
+function checkAutoComplete() {
+  // show button if all cards are face up
+  const allFaceUp = tableau.every(p => p.every(c => c.faceUp)) && !stock.length;
+  document.getElementById('autoBtn').style.display = allFaceUp ? 'inline-block' : 'none';
+}
+
+function autoComplete() {
+  clearInterval(timerInt);
+  let moved = true;
+  const step = () => {
+    moved = false;
+    // try waste
+    if (waste.length) {
+      const c = waste[waste.length-1];
+      const f = autoPlaceToFoundation(c);
+      if (f >= 0) { waste.pop(); foundations[f].push(c); score+=15; moves++; moved=true; }
+    }
+    // try tableau
+    for (let col=0; col<7; col++) {
+      const pile = tableau[col];
+      if (!pile.length) continue;
+      const c = pile[pile.length-1];
+      const f = autoPlaceToFoundation(c);
+      if (f >= 0) { pile.pop(); foundations[f].push(c); score+=15; moves++; moved=true; }
+    }
+    document.getElementById('scoreVal').textContent = score;
+    document.getElementById('movesVal').textContent = moves;
+    render();
+    if (checkWin()) return;
+    if (moved) setTimeout(step, 80);
+  };
+  step();
+}
+
+function checkWin() {
+  if (foundations.every(f => f.length === 13)) {
+    clearInterval(timerInt);
+    const b = best();
+    if (!b || seconds < parseInt(b)) saveBest(seconds);
+    updateBest();
+    document.getElementById('winSub').innerHTML =
+      `Time: ${fmt(seconds)}<br>Moves: ${moves}<br>Score: ${score}`;
+    setTimeout(() => document.getElementById('winOverlay').classList.add('show'), 600);
+    return true;
+  }
+  return false;
+}
+
+// ---- Render ----
+function cardHTML(card, extraClass='', style='') {
+  if (!card.faceUp) return `<div class="card face-down ${extraClass}" style="${style}"></div>`;
+  const sc = SUIT_COLORS[card.suit];
+  const suit = SUITS[card.suit];
+  const rank = RANKS[card.rank];
+  return `<div class="card ${sc} ${extraClass}" style="${style}">
+    <div class="card-corner"><div class="card-rank">${rank}</div><div class="card-suit">${suit}</div></div>
+    <div class="card-center">${suit}</div>
+    <div class="card-corner bottom"><div class="card-rank">${rank}</div><div class="card-suit">${suit}</div></div>
+  </div>`;
+}
+
+function isSelected(source, cardIdx, colIdx) {
+  if (!selected) return false;
+  if (selected.source !== source) return false;
+  if (source === 'waste') return true;
+  if (source === 'tableau') return selected.colIdx === colIdx && cardIdx >= selected.cardIdx;
+  if (source === 'foundation') return selected.colIdx === colIdx;
+  return false;
+}
+
+function render() {
+  // Stock
+  const stockSlot = document.getElementById('stockSlot');
+  if (stock.length) {
+    stockSlot.innerHTML = cardHTML({faceUp:false});
+    stockSlot.querySelector('.card').onclick = drawFromStock;
+  } else {
+    stockSlot.innerHTML = `<span class="slot-label" style="font-size:28px;opacity:0.5">↺</span>`;
+    stockSlot.onclick = drawFromStock;
+  }
+
+  // Waste
+  const wasteSlot = document.getElementById('wasteSlot');
+  wasteSlot.innerHTML = '';
+  if (waste.length) {
+    const showCount = drawMode === 3 ? Math.min(3, waste.length) : 1;
+    const startIdx = waste.length - showCount;
+    for (let i=0; i<showCount; i++) {
+      const card = waste[startIdx+i];
+      const isTop = (i === showCount-1);
+      const offset = drawMode===3 ? i*18 : 0;
+      const sel = isTop && isSelected('waste', waste.length-1, null);
+      const el = document.createElement('div');
+      el.style.cssText = `position:absolute;left:${offset}px;top:0;z-index:${i};`;
+      el.innerHTML = cardHTML(card, sel?'selected':'', `pointer-events:${isTop?'auto':'none'}`);
+      if (isTop) {
+        el.querySelector('.card').onclick = () => handleCardClick('waste', waste.length-1, null);
+        el.querySelector('.card').ondblclick = () => handleDblClick('waste', waste.length-1, null);
+      }
+      wasteSlot.appendChild(el);
+    }
+  }
+
+  // Foundations
+  for (let f=0; f<4; f++) {
+    const slot = document.getElementById('f'+f);
+    const pile = foundations[f];
+    if (pile.length) {
+      const card = pile[pile.length-1];
+      const sel = isSelected('foundation', pile.length-1, f);
+      slot.innerHTML = cardHTML(card, sel?'selected':'');
+      slot.querySelector('.card').onclick = () => handleCardClick('foundation', pile.length-1, f);
+    } else {
+      slot.innerHTML = `<span class="slot-label">${SUITS[f]}</span>`;
+      slot.onclick = () => handleDestClick('foundation', f);
+    }
+  }
+
+  // Tableau
+  const tab = document.getElementById('tableau');
+  tab.innerHTML = '';
+  for (let col=0; col<7; col++) {
+    const colEl = document.createElement('div');
+    colEl.className = 'tableau-col';
+    const pile = tableau[col];
+    const colHeight = pile.length === 0 ? 112 : pile.reduce((h, c, i) => {
+      return h + (i < pile.length-1 ? (c.faceUp ? 28 : 18) : 112);
+    }, 0);
+    colEl.style.height = colHeight + 'px';
+
+    if (!pile.length) {
+      colEl.innerHTML = `<div class="slot" style="position:absolute;top:0;left:0;width:80px;height:112px;"><span class="slot-label">K</span></div>`;
+      colEl.querySelector('.slot').onclick = () => { if(selected && canPlaceOnTableau(selected.cards[0], col)) handleDestClick('tableau', col); };
+    }
+
+    let top = 0;
+    pile.forEach((card, i) => {
+      const isTop = i === pile.length-1;
+      const offset = i === 0 ? 0 : (pile[i-1].faceUp ? 28 : 18);
+      if (i > 0) top += pile[i-1].faceUp ? 28 : 18;
+      const sel = isSelected('tableau', i, col);
+      const div = document.createElement('div');
+      div.style.cssText = `position:absolute;top:${top}px;left:0;z-index:${i};`;
+      div.innerHTML = cardHTML(card, sel?'selected':'');
+      const cardEl = div.querySelector('.card');
+      if (card.faceUp) {
+        cardEl.onclick = () => handleCardClick('tableau', i, col);
+        cardEl.ondblclick = () => handleDblClick('tableau', i, col);
+        if (selected && isTop && canPlaceOnTableau(selected.cards[0], col)) {
+          cardEl.classList.add('valid-target');
+        }
+      }
+      colEl.appendChild(div);
+    });
+    tab.appendChild(colEl);
+  }
+
+  // foundation click targets
+  for (let f=0; f<4; f++) {
+    const slot = document.getElementById('f'+f);
+    if (selected && selected.cards.length===1) {
+      if (canPlaceOnFoundation(selected.cards[0], f)) {
+        slot.style.borderColor='rgba(126,200,154,0.6)';
+        slot.onclick = () => handleDestClick('foundation', f);
+      } else {
+        slot.style.borderColor='';
+      }
+    } else {
+      slot.style.borderColor='';
+    }
+  }
+}
+
+// ---- Init ----
+updateBest();
+newGame();
+</script>
+</body>
+</html>
